@@ -1,5 +1,5 @@
 use anyhow::{bail, Result};
-use std::{collections::HashMap, fmt::Display, rc::Rc};
+use std::{collections::BTreeMap, fmt::Display, rc::Rc};
 
 pub mod builtins;
 use self::builtins::Builtin;
@@ -40,7 +40,7 @@ impl Display for Expr {
 
 #[derive(Debug, Clone)]
 pub struct Environment {
-    bindings: HashMap<String, Rc<Expr>>,
+    bindings: BTreeMap<String, Rc<Expr>>,
     parent: Option<Rc<Environment>>,
 }
 
@@ -55,10 +55,10 @@ impl Environment {
         }
     }
 
-    pub fn lookup(&self, symbol: String) -> Result<Expr> {
-        match self.get(&symbol) {
+    pub fn lookup(&self, symbol: &str) -> Result<Expr> {
+        match self.get(symbol) {
             Some(expr) => Ok(expr.as_ref().clone()),
-            None => bail!("failed to lookup {symbol:?}"),
+            None => bail!("undefined value {symbol:?}"),
         }
     }
 
@@ -69,35 +69,35 @@ impl Environment {
     pub fn new_child(&self) -> Self {
         Self {
             parent: Some(Rc::new(self.clone())),
-            bindings: HashMap::new(),
+            bindings: Default::default(),
         }
     }
 }
 
-pub(crate) fn eval(expr: Expr, env: &mut Environment) -> Result<Expr> {
+pub(crate) fn eval(expr: &Expr, env: &mut Environment) -> Result<Expr> {
     match expr {
         Expr::Nil
         | Expr::Builtin(_)
         | Expr::Bool(_)
         | Expr::Number(_)
         | Expr::String(_)
-        | Expr::Lambda { .. } => Ok(expr),
-        Expr::Symbol(s) => env.lookup(s),
+        | Expr::Lambda { .. } => Ok(expr.to_owned()),
+        Expr::Symbol(ref s) => env.lookup(s),
         Expr::List(list) => match &list[..] {
             [] => Ok(Expr::Nil),
 
             // if
             [Expr::Symbol(op_symbol), condition, consequent, alternate] if op_symbol == "if" => {
-                match eval(condition.clone(), env)? {
-                    Expr::Bool(true) => eval(consequent.clone(), env),
-                    Expr::Bool(false) => eval(alternate.clone(), env),
+                match eval(condition, env)? {
+                    Expr::Bool(true) => eval(consequent, env),
+                    Expr::Bool(false) => eval(alternate, env),
                     x => bail!("expected a bool but found {x:?}"),
                 }
             }
 
             // def
             [Expr::Symbol(op), Expr::Symbol(s), value] if op == "def" => {
-                let value = eval(value.clone(), env)?;
+                let value = eval(value, env)?;
                 env.set(s.to_string(), value);
                 Ok(Expr::Nil)
             }
@@ -105,7 +105,7 @@ pub(crate) fn eval(expr: Expr, env: &mut Environment) -> Result<Expr> {
             // let
             [Expr::Symbol(op), Expr::List(s), body] if op == "let" => {
                 let bindings = s
-                    .into_iter()
+                    .iter()
                     .map(|kv_list| match kv_list {
                         Expr::List(pair) => match &pair[..] {
                             [Expr::Symbol(s), value] => Ok((s, value)),
@@ -119,12 +119,12 @@ pub(crate) fn eval(expr: Expr, env: &mut Environment) -> Result<Expr> {
                     new_env.set(k.to_owned(), v.clone());
                 }
 
-                eval(body.clone(), &mut new_env)
+                eval(body, &mut new_env)
             }
 
             // fn
             [Expr::Symbol(op), Expr::List(args), body] if op == "fn" => args
-                .into_iter()
+                .iter()
                 .map(|arg| {
                     if let Expr::Symbol(s) = arg {
                         Ok(s.to_owned())
@@ -143,13 +143,13 @@ pub(crate) fn eval(expr: Expr, env: &mut Environment) -> Result<Expr> {
 
             // eval
             [Expr::Symbol(op), arg] if op == "eval" => {
-                eval(arg.clone(), env).and_then(|out| eval(out.clone(), env))
+                eval(arg, env).and_then(|out| eval(&out, env))
             }
 
             // sexp
             [op, rest @ ..] => {
-                let op = eval(op.clone(), env)?;
-                apply(&op, &rest, env)
+                let op = eval(op, env)?;
+                apply(&op, rest, env)
             }
         },
     }
@@ -159,10 +159,10 @@ fn apply(operator: &Expr, rest: &[Expr], env: &mut Environment) -> Result<Expr> 
     match operator {
         Expr::Lambda { args, body } => {
             let mut new_env = env.new_child();
-            for (i, arg) in args.into_iter().enumerate() {
-                new_env.set(arg.to_owned(), eval(rest[i].clone(), env)?);
+            for (i, arg) in args.iter().enumerate() {
+                new_env.set(arg.to_owned(), eval(&rest[i], env)?);
             }
-            eval(body.as_ref().clone(), &mut new_env)
+            eval(body, &mut new_env)
         }
         Expr::Builtin(f) => f(rest, env),
         _ => unreachable!("i don't know {operator:#?} {rest:#?} {env:#?}"),

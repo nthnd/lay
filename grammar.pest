@@ -7,7 +7,7 @@ WHITESPACE = _{
 }
 COMMENT = _{ ";" ~ (!"\n" ~ ANY)* }
 
-input = _{ SOI ~ expr ~ EOI }
+input = _{ SOI ~ expr+ ~ EOI }
 
 expr = _{
     nil

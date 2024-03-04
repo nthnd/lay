@@ -1,4 +1,4 @@
-use anyhow::{Context, Result};
+use anyhow::Result;
 use pest::Parser;
 use pest_derive::Parser;
 
@@ -8,8 +8,8 @@ use crate::eval::Expr;
 #[grammar = "grammar.pest"]
 struct Grammar;
 
-pub(crate) fn read(input: &str) -> Result<Expr> {
-    let mut ast = Grammar::parse(Rule::input, input)?;
+pub(crate) fn read(input: &str) -> Result<Vec<Expr>> {
+    let ast = Grammar::parse(Rule::input, input)?;
 
     if std::env::var("DEBUG_LAY").is_ok() {
         pest_ascii_tree::print_ascii_tree(Ok(ast.clone()));
@@ -27,8 +27,7 @@ pub(crate) fn read(input: &str) -> Result<Expr> {
             Rule::EOI
                 | Rule::WHITESPACE
                 | Rule::inner
-                | Rule::symbol_chars
-                | Rule::input
+                | Rule::symbol_chars | Rule::input
                 | Rule::char
                 | Rule::expr
                 | Rule::COMMENT => 
@@ -36,8 +35,7 @@ pub(crate) fn read(input: &str) -> Result<Expr> {
         }
     }
 
-    let expr = ast.next().context("failed to parse input")?;
-    let value = parse_value(expr);
-
-    Ok(value)
+    let without_eoi = ast.len() - 1;
+    let exprs = ast.take(without_eoi);
+    Ok(exprs.map(parse_value).collect())
 }
