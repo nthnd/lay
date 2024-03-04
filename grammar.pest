@@ -1,0 +1,51 @@
+WHITESPACE = _{ 
+    "\n"
+    | "\r"
+    | "\t"
+    | " "
+    | ","
+}
+COMMENT = _{ ";" ~ (!"\n" ~ ANY)* }
+
+input = _{ SOI ~ expr ~ EOI }
+
+expr = _{
+    nil
+    | bool
+    | number
+    | symbol
+    | string
+    | list
+}
+
+nil = @{ "nil" }
+
+bool = @{ "true" | "false" }
+
+number = @{ ("+" | "-")? ~ ASCII_DIGIT ~ (ASCII_DIGIT)* }
+
+symbol = @{
+    symbol_chars+
+}
+symbol_chars = {
+    !("(" 
+        | ")" 
+        | "\"" 
+        | WHITESPACE 
+        | COMMENT 
+        | number 
+    ) 
+    ~ ANY
+}
+
+string = ${ "\"" ~ inner ~ "\"" }
+inner = @{ char* }
+char = {
+    !("\"" | "\\") ~ ANY
+    | "\\" ~ ("\"" | "\\" | "/" | "b" | "f" | "n" | "r" | "t")
+    | "\\" ~ ("u" ~ ASCII_HEX_DIGIT{4})
+}
+
+list = {
+    "(" ~ ")" | "(" ~ expr+ ~ ")"
+}
