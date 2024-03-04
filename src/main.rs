@@ -1,9 +1,8 @@
+use anyhow::{bail, Context, Result};
 use pest::Parser;
 use pest_derive::Parser;
 use rustyline::config::Configurer;
 use std::{collections::HashMap, fmt::Display, rc::Rc};
-
-use anyhow::{bail, Context, Result};
 
 #[derive(Parser)]
 #[grammar = "grammar.pest"]
@@ -136,6 +135,26 @@ fn eval(expr: Expr, env: &mut Environment) -> Result<Expr> {
                 Ok(Expr::Nil)
             }
 
+            // let
+            [Expr::Symbol(op), Expr::List(s), body] if op == "let" => {
+                let bindings = s
+                    .into_iter()
+                    .map(|kv_list| match kv_list {
+                        Expr::List(pair) => match &pair[..] {
+                            [Expr::Symbol(s), value] => Ok((s, value)),
+                            e => bail!("found invalid binding {e:?}"),
+                        },
+                        e => bail!("found invalid binding {e:?}"),
+                    })
+                    .collect::<Result<Vec<(&String, &Expr)>>>()?;
+                let mut new_env = env.new_child();
+                for (k, v) in bindings {
+                    new_env.set(k.to_owned(), v.clone());
+                }
+
+                eval(body.clone(), &mut new_env)
+            }
+
             // fn
             [Expr::Symbol(op), Expr::List(args), body] if op == "fn" => args
                 .into_iter()
@@ -151,6 +170,14 @@ fn eval(expr: Expr, env: &mut Environment) -> Result<Expr> {
                     args,
                     body: Rc::new(body.clone()),
                 }),
+
+            // quote
+            [Expr::Symbol(op), arg] if op == "quote" => Ok(arg.clone()),
+
+            // eval
+            [Expr::Symbol(op), arg] if op == "eval" => {
+                eval(arg.clone(), env).and_then(|out| eval(out.clone(), env))
+            }
 
             // sexp
             [op, rest @ ..] => {
@@ -195,7 +222,7 @@ fn main() {
         match value {
             Ok(v) => println!("{v}"),
             Err(e) => {
-                dbg!(e);
+                println!("{e}");
             }
         }
     }
