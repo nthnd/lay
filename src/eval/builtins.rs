@@ -1,3 +1,7 @@
+use std::{io::stdin, rc::Rc};
+
+use crate::eval::LayResult;
+
 use super::{eval, Environment, Expr};
 use anyhow::{bail, Result};
 
@@ -29,7 +33,10 @@ impl Default for Environment {
                 add as "+",
                 sub as "-",
                 eq  as "=",
-
+                println,
+                readln,
+                parse_num,
+                str,
             ],
         }
     }
@@ -125,4 +132,63 @@ pub fn eq(values: &[Expr], env: &mut Environment) -> Result<Expr> {
 
         Ok(Expr::Bool(values.into_iter().all(|v| v == first)))
     }
+}
+
+pub fn println(values: &[Expr], env: &mut Environment) -> Result<Expr> {
+    if values.len() != 1 {
+        bail!("wrong number of args `{}` passed to println ", values.len())
+    }
+
+    eval(&values[0], env).and_then(|v| {
+        match v {
+            Expr::String(s) => println!("{s}"),
+            _ => bail!("only strings can be printed"),
+        }
+        Ok(Expr::Nil)
+    })
+}
+
+pub fn readln(values: &[Expr], _env: &mut Environment) -> Result<Expr> {
+    if values.len() != 0 {
+        bail!("wrong number of args `{}` passed to println ", values.len())
+    }
+
+    let stdin = stdin();
+
+    let mut input = String::new();
+    let _input_bytes = stdin.read_line(&mut input)?;
+
+    input = input.trim_end().to_string();
+
+    Ok(Expr::String(input))
+}
+
+pub fn parse_num(values: &[Expr], env: &mut Environment) -> Result<Expr> {
+    if values.len() != 1 {
+        bail!("wrong number of args `{}` passed to parse_num", values.len())
+    }
+
+    let Expr::String(s) = eval(&values[0], env)? else {
+        bail!("expeceted string but found {values:?}")
+    };
+
+    match s.parse::<i32>() {
+        Ok(n) => Ok(Expr::Result(Rc::new(LayResult::Success(Expr::Number(n))))),
+        Err(e) => Ok(Expr::Result(Rc::new(LayResult::Fail(Expr::String(
+            e.to_string(),
+        ))))),
+    }
+}
+
+pub fn str(values: &[Expr], env: &mut Environment) -> Result<Expr> {
+    Ok(Expr::String(
+        values
+            .into_iter()
+            .map(|v| eval(v, env))
+            .collect::<Result<Vec<Expr>>>()?
+            .into_iter()
+            .map(|v| format!("{v}"))
+            .collect::<Vec<String>>()
+            .join(""),
+    ))
 }

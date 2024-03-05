@@ -4,7 +4,13 @@ mod read;
 use std::path::PathBuf;
 
 use eval::Environment;
-use rustyline::{config::Configurer, error::ReadlineError};
+use pest::Parser;
+use rustyline::{
+    config::Configurer, error::ReadlineError, validate::Validator, Completer, Helper, Highlighter,
+    Hinter,
+};
+
+use crate::read::Grammar;
 
 fn main() {
     if let Some(path) = std::env::args().nth(1) {
@@ -24,15 +30,40 @@ pub fn file(path: PathBuf) {
     for expr in exprs {
         let value = eval::eval(&expr, &mut env);
         match value {
-            Ok(v) => println!("{v}"),
+            Ok(_) => {
+                // println!("{v}")
+            }
             Err(e) => {
                 println!("{e}");
+                break;
             }
         }
     }
 }
 pub fn repl() {
-    let mut rl = rustyline::DefaultEditor::new().unwrap();
+    #[derive(Completer, Highlighter, Hinter, Helper)]
+    struct LayValidator;
+    impl Validator for LayValidator {
+        fn validate(
+            &self,
+            ctx: &mut rustyline::validate::ValidationContext,
+        ) -> rustyline::Result<rustyline::validate::ValidationResult> {
+            let input = ctx.input();
+
+            match Grammar::parse(read::Rule::input, input) {
+                Ok(_) => Ok(rustyline::validate::ValidationResult::Valid(None)),
+                Err(_) => Ok(rustyline::validate::ValidationResult::Invalid(None)),
+            }
+        }
+
+        fn validate_while_typing(&self) -> bool {
+            true
+        }
+    }
+
+    let h = LayValidator;
+    let mut rl = rustyline::Editor::new().unwrap();
+    rl.set_helper(Some(h));
     rl.set_edit_mode(rustyline::EditMode::Vi);
 
     let mut env = Environment::default();

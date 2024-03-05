@@ -13,7 +13,14 @@ pub enum Expr {
     String(String),
     Lambda { args: Vec<String>, body: Rc<Expr> },
     Builtin(Builtin),
+    Result(Rc<LayResult>),
     List(Vec<Expr>),
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub enum LayResult {
+    Success(Expr),
+    Fail(Expr),
 }
 
 impl Display for Expr {
@@ -34,6 +41,7 @@ impl Display for Expr {
                     .join(" ")
             ),
             Expr::Builtin(b) => write!(f, "{b:#?}"),
+            Expr::Result(v) => write!(f, "{v:#?}"),
         }
     }
 }
@@ -81,6 +89,7 @@ pub(crate) fn eval(expr: &Expr, env: &mut Environment) -> Result<Expr> {
         | Expr::Bool(_)
         | Expr::Number(_)
         | Expr::String(_)
+        | Expr::Result(_)
         | Expr::Lambda { .. } => Ok(expr.to_owned()),
         Expr::Symbol(ref s) => env.lookup(s),
         Expr::List(list) => match &list[..] {
@@ -92,6 +101,50 @@ pub(crate) fn eval(expr: &Expr, env: &mut Environment) -> Result<Expr> {
                     Expr::Bool(true) => eval(consequent, env),
                     Expr::Bool(false) => eval(alternate, env),
                     x => bail!("expected a bool but found {x:?}"),
+                }
+            }
+
+            // unwrap
+            [Expr::Symbol(op_symbol), expr, fallback] if op_symbol == "unwrap" => {
+                match eval(expr, env)? {
+                    Expr::Result(r) => match r.as_ref() {
+                        LayResult::Success(e) => eval(&e, env),
+                        LayResult::Fail(_) => eval(fallback, env),
+                    },
+                    x => bail!("expected a result but found {x:?}"),
+                }
+            }
+
+            // map
+            [Expr::Symbol(op_symbol), func, expr] if op_symbol == "map" => match eval(expr, env)? {
+                Expr::Result(r) => match r.as_ref() {
+                    LayResult::Success(e) => {
+                        let f = eval(func, env)?;
+                        Ok(Expr::Result(Rc::new(LayResult::Success(apply(
+                            &f,
+                            &[e.clone()],
+                            env,
+                        )?))))
+                    }
+                    LayResult::Fail(_) => eval(expr, env),
+                },
+                x => bail!("expected a result but found {x:?}"),
+            },
+
+            // try
+            [Expr::Symbol(op_symbol), expr, success, fail] if op_symbol == "try" => {
+                match eval(expr, env)? {
+                    Expr::Result(r) => match r.as_ref() {
+                        LayResult::Success(e) => {
+                            let f = eval(success, env)?;
+                            Ok(apply(&f, &[e.clone()], env)?)
+                        }
+                        LayResult::Fail(e) => {
+                            let f = eval(fail, env)?;
+                            Ok(apply(&f, &[e.clone()], env)?)
+                        }
+                    },
+                    x => bail!("expected a result but found {x:?}"),
                 }
             }
 
@@ -108,12 +161,13 @@ pub(crate) fn eval(expr: &Expr, env: &mut Environment) -> Result<Expr> {
                     .iter()
                     .map(|kv_list| match kv_list {
                         Expr::List(pair) => match &pair[..] {
-                            [Expr::Symbol(s), value] => Ok((s, value)),
+                            [Expr::Symbol(s), value] => Ok((s, eval(value, env)?)),
                             e => bail!("found invalid binding {e:?}"),
                         },
                         e => bail!("found invalid binding {e:?}"),
                     })
-                    .collect::<Result<Vec<(&String, &Expr)>>>()?;
+                    .collect::<Result<Vec<(&String, Expr)>>>()?;
+
                 let mut new_env = env.new_child();
                 for (k, v) in bindings {
                     new_env.set(k.to_owned(), v.clone());

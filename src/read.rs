@@ -6,7 +6,8 @@ use crate::eval::Expr;
 
 #[derive(Parser)]
 #[grammar = "grammar.pest"]
-struct Grammar;
+pub struct Grammar;
+
 
 pub(crate) fn read(input: &str) -> Result<Vec<Expr>> {
     let ast = Grammar::parse(Rule::input, input)?;
@@ -22,7 +23,7 @@ pub(crate) fn read(input: &str) -> Result<Vec<Expr>> {
             Rule::bool => Expr::Bool(expr.as_str().parse().unwrap()),
             Rule::number => Expr::Number(expr.as_str().parse().unwrap()),
             Rule::symbol => Expr::Symbol(expr.as_str().to_string()),
-            Rule::string => Expr::String(expr.as_str().to_string()),
+            Rule::string => Expr::String(expr.as_str().trim_start_matches("\"").trim_end_matches("\"").to_string()),
             Rule::list => Expr::List(expr.into_inner().map(parse_value).collect()),
             Rule::EOI
                 | Rule::WHITESPACE
