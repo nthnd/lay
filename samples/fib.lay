@@ -1,9 +1,9 @@
-(def fib 
-  (fn (n) 
-    (if (= n 0) 
-        0 
+(def fib
+  (fn (n)
+    (if (= n 0)
+        0
         (if (= n 1)
-            1 
+            1
             (+ (fib (- n 1))
                (fib (- n 2)))))))
 
@@ -13,9 +13,9 @@
 
 (let ((input (readln)))  ;; read a line of input
   (try (parse_num input) ;; try to parse input
-       (fn (num) 
-         (println 
-           (str "fib of " input " is " (fib num)))) 
+       (fn (num)
+         (println
+           (str "fib of " input " is " (fib num))))
        (fn (e)
          (println
            (str "Error parsing input: " e)))))
