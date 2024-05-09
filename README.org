@@ -1,0 +1,21 @@
+* Lay
+
+A terrible toy tree-walk lisp interpreter. Not to be taken seriously.
+
+** Language features
+
+Arithmetic should work. No further guarantees.
+
+** Syntax
+
+Look at the `samples/fib.lay` file.
+
+* Usage
+
+Start by cloning the repo, and
+
+#+begin_src sh
+cargo r               # start an interactive repl
+cargo r -- <filename> # interpret the given file
+#+end_src
+
