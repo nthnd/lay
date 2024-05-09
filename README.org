@@ -8,7 +8,7 @@ Arithmetic should work. No further guarantees.
 
 ** Syntax
 
-Look at the `samples/fib.lay` file.
+Look at the =samples/fib.lay= file.
 
 * Usage
 
